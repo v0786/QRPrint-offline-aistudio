@@ -1,0 +1,6 @@
+{
+  "name": "PrintSpool Local - Print Job Management System",
+  "description": "A comprehensive local-first print job management platform with customer mobile QR workflow, direct local PC transfer, client-side PDF.js print preview with orientation & color verification, recharts print volume & resource telemetry dashboard, queue auto-process instant spooling toggle, DoD 5220.22-M secure shredding with visual toast alerts, Windows PowerShell/Batch installer scripts, and merchant localhost dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
