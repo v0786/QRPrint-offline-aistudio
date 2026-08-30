@@ -5,10 +5,13 @@ export type PaperFinish = 'standard_80gsm' | 'premium_100gsm' | 'glossy_photo_20
 export type BindingOption = 'none' | 'staple_top_left' | 'corner_punch' | 'spiral_bound' | 'comb_bound';
 export type Orientation = 'portrait' | 'landscape' | 'auto';
 
+export type JobPriority = 'urgent' | 'high' | 'normal' | 'low';
+
 export type JobStatus = 
   | 'pending_payment'
   | 'received_local'
   | 'spooling'
+  | 'paused'
   | 'printing'
   | 'ready_for_pickup'
   | 'completed'
@@ -81,6 +84,9 @@ export interface PrintJob {
     amount: number;
   };
   status: JobStatus;
+  priority?: JobPriority;
+  pausedAt?: string;
+  resumedAt?: string;
   assignedPrinterId: string;
   progressPercent: number;
   pagesPrinted: number;
@@ -155,7 +161,7 @@ export interface MerchantSettings {
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
-  action: 'JOB_CREATED' | 'PAYMENT_RECEIVED' | 'JOB_SPOOLED' | 'JOB_COMPLETED' | 'FILE_SHREDDED' | 'PREFERENCES_OVERRIDDEN' | 'PRINTER_CHANGED' | 'SYSTEM_STARTUP';
+  action: 'JOB_CREATED' | 'PAYMENT_RECEIVED' | 'JOB_SPOOLED' | 'JOB_PAUSED' | 'JOB_RESUMED' | 'JOB_PRIORITIZED' | 'QUEUE_REORDERED' | 'JOB_COMPLETED' | 'FILE_SHREDDED' | 'PREFERENCES_OVERRIDDEN' | 'PRINTER_CHANGED' | 'SYSTEM_STARTUP';
   jobId?: string;
   details: string;
   actor: 'CUSTOMER' | 'MERCHANT' | 'SYSTEM_DAEMON';

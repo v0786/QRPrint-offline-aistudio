@@ -6,6 +6,7 @@ import {
   MerchantSettings, 
   AuditLogEntry, 
   JobStatus, 
+  JobPriority,
   PrintPreferences,
   ToastNotification 
 } from '../types';
@@ -43,6 +44,13 @@ interface PrintJobContextType {
   assignPrinterToJob: (jobId: string, printerId: string) => void;
   spoolAndPrintJob: (jobId: string) => void;
   cancelJob: (jobId: string, reason?: string) => void;
+  pauseJob: (jobId: string, reason?: string) => void;
+  resumeJob: (jobId: string) => void;
+  prioritizeJob: (jobId: string, priority: JobPriority, moveToTop?: boolean) => void;
+  reorderQueue: (jobId: string, direction: 'up' | 'down' | 'top') => void;
+  pauseAllJobs: () => void;
+  resumeAllJobs: () => void;
+  clearCompletedJobs: () => void;
   forceShredJobFiles: (jobId: string) => void;
   updatePrinterStatus: (printerId: string, updates: Partial<LocalPrinter>) => void;
   updatePricingSettings: (settings: PricingSettings) => void;
@@ -534,6 +542,181 @@ export const PrintJobProvider: React.FC<{ children: ReactNode }> = ({ children }
     );
   }, [addAudit]);
 
+  const pauseJob = useCallback((jobId: string, reason?: string) => {
+    setJobs(prev => prev.map(job => {
+      if (job.id !== jobId) return job;
+      return {
+        ...job,
+        status: 'paused' as JobStatus,
+        pausedAt: new Date().toISOString(),
+        merchantNotes: reason ? `Paused: ${reason}` : (job.merchantNotes || 'Paused by operator'),
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+    addAudit(
+      'JOB_PAUSED',
+      `Print Job ${jobId} was PAUSED by operator in local spooler. ${reason ? `Reason: ${reason}` : ''}`,
+      'MERCHANT',
+      jobId
+    );
+    addToast({
+      type: 'warning',
+      title: 'Print Job Paused',
+      message: `Job #${jobId} has been paused. Spooler stream held.`,
+      jobId,
+      duration: 4000,
+    });
+  }, [addAudit, addToast]);
+
+  const resumeJob = useCallback((jobId: string) => {
+    setJobs(prev => prev.map(job => {
+      if (job.id !== jobId) return job;
+      const nextStatus: JobStatus = job.progressPercent > 0 ? 'printing' : 'spooling';
+      return {
+        ...job,
+        status: nextStatus,
+        resumedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+    addAudit(
+      'JOB_RESUMED',
+      `Print Job ${jobId} was RESUMED by operator. Spooler transmission active.`,
+      'MERCHANT',
+      jobId
+    );
+    addToast({
+      type: 'info',
+      title: 'Print Job Resumed',
+      message: `Job #${jobId} resumed and back in active spool queue.`,
+      jobId,
+      duration: 4000,
+    });
+  }, [addAudit, addToast]);
+
+  const prioritizeJob = useCallback((jobId: string, priority: JobPriority, moveToTop = false) => {
+    setJobs(prev => {
+      const targetIndex = prev.findIndex(j => j.id === jobId);
+      if (targetIndex === -1) return prev;
+
+      const targetJob: PrintJob = {
+        ...prev[targetIndex],
+        priority,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (moveToTop || priority === 'urgent') {
+        const remaining = prev.filter(j => j.id !== jobId);
+        return [targetJob, ...remaining];
+      }
+
+      return prev.map(j => j.id === jobId ? targetJob : j);
+    });
+
+    addAudit(
+      'JOB_PRIORITIZED',
+      `Job ${jobId} priority set to ${priority.toUpperCase()}${moveToTop ? ' (Promoted to Top of Spool Queue)' : ''}`,
+      'MERCHANT',
+      jobId
+    );
+
+    addToast({
+      type: priority === 'urgent' ? 'warning' : 'info',
+      title: `Job Prioritized: ${priority.toUpperCase()}`,
+      message: `Job #${jobId} priority updated to ${priority.toUpperCase()}${moveToTop ? ' and moved to front of queue.' : '.'}`,
+      jobId,
+      duration: 4000,
+    });
+  }, [addAudit, addToast]);
+
+  const reorderQueue = useCallback((jobId: string, direction: 'up' | 'down' | 'top') => {
+    setJobs(prev => {
+      const index = prev.findIndex(j => j.id === jobId);
+      if (index === -1) return prev;
+
+      const newJobs = [...prev];
+      if (direction === 'top') {
+        const [removed] = newJobs.splice(index, 1);
+        newJobs.unshift(removed);
+      } else if (direction === 'up' && index > 0) {
+        const [removed] = newJobs.splice(index, 1);
+        newJobs.splice(index - 1, 0, removed);
+      } else if (direction === 'down' && index < newJobs.length - 1) {
+        const [removed] = newJobs.splice(index, 1);
+        newJobs.splice(index + 1, 0, removed);
+      }
+
+      return newJobs;
+    });
+
+    addAudit(
+      'QUEUE_REORDERED',
+      `Operator manually shifted Job ${jobId} position in spool queue (${direction.toUpperCase()})`,
+      'MERCHANT',
+      jobId
+    );
+  }, [addAudit]);
+
+  const pauseAllJobs = useCallback(() => {
+    let pausedCount = 0;
+    setJobs(prev => prev.map(job => {
+      if (job.status === 'spooling' || job.status === 'printing' || job.status === 'received_local') {
+        pausedCount++;
+        return {
+          ...job,
+          status: 'paused' as JobStatus,
+          pausedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return job;
+    }));
+
+    addAudit('JOB_PAUSED', `All active print spoolers paused by operator (${pausedCount} jobs held)`, 'MERCHANT');
+    addToast({
+      type: 'warning',
+      title: 'All Print Spoolers Paused',
+      message: `Paused ${pausedCount} active jobs in the spooler. Click Resume All to continue.`,
+      duration: 5000,
+    });
+  }, [addAudit, addToast]);
+
+  const resumeAllJobs = useCallback(() => {
+    let resumedCount = 0;
+    setJobs(prev => prev.map(job => {
+      if (job.status === 'paused') {
+        resumedCount++;
+        const nextStatus: JobStatus = job.progressPercent > 0 ? 'printing' : 'spooling';
+        return {
+          ...job,
+          status: nextStatus,
+          resumedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return job;
+    }));
+
+    addAudit('JOB_RESUMED', `All paused jobs resumed by operator (${resumedCount} jobs re-spooled)`, 'MERCHANT');
+    addToast({
+      type: 'info',
+      title: 'All Print Spoolers Resumed',
+      message: `Resumed ${resumedCount} jobs back into printer queues.`,
+      duration: 5000,
+    });
+  }, [addAudit, addToast]);
+
+  const clearCompletedJobs = useCallback(() => {
+    setJobs(prev => prev.filter(j => j.status !== 'completed' && j.status !== 'cancelled'));
+    addAudit('JOB_COMPLETED', 'Operator cleared completed and cancelled jobs from spool memory', 'MERCHANT');
+    addToast({
+      type: 'info',
+      title: 'Queue Cleaned',
+      message: 'Completed and cancelled job records cleared from the active spooler.',
+      duration: 4000,
+    });
+  }, [addAudit, addToast]);
+
   const cancelJob = useCallback((jobId: string, reason?: string) => {
     setJobs(prev => prev.map(job => {
       if (job.id !== jobId) return job;
@@ -636,6 +819,13 @@ export const PrintJobProvider: React.FC<{ children: ReactNode }> = ({ children }
       assignPrinterToJob,
       spoolAndPrintJob,
       cancelJob,
+      pauseJob,
+      resumeJob,
+      prioritizeJob,
+      reorderQueue,
+      pauseAllJobs,
+      resumeAllJobs,
+      clearCompletedJobs,
       forceShredJobFiles,
       updatePrinterStatus,
       updatePricingSettings,

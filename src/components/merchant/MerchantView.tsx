@@ -42,6 +42,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { PrintVolumeWidget } from './PrintVolumeWidget';
+import { QueueManagementPanel } from './QueueManagementPanel';
 
 type MerchantSubTab = 'queue' | 'volume_analytics' | 'printers' | 'pricing' | 'qr_signage' | 'daemon_audit';
 
@@ -66,10 +67,8 @@ export const MerchantView: React.FC = () => {
     setQueueAutoProcess
   } = usePrintJob();
 
-  // Navigation & Filter state
+  // Navigation state
   const [activeTab, setActiveTab] = useState<MerchantSubTab>('queue');
-  const [queueFilter, setQueueFilter] = useState<'ALL' | 'ACTIVE' | 'PRINTING' | 'READY' | 'COMPLETED'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
 
   const isAutoProcessOn = merchantSettings.queueAutoProcess ?? merchantSettings.autoPrintApprovedJobs ?? true;
 
@@ -78,46 +77,6 @@ export const MerchantView: React.FC = () => {
   const [contactJob, setContactJob] = useState<PrintJob | null>(null);
   const [shredJob, setShredJob] = useState<PrintJob | null>(null);
   const [previewJob, setPreviewJob] = useState<PrintJob | null>(null);
-
-  // Filtered jobs
-  const filteredJobs = jobs.filter(job => {
-    // Search matching
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const match = job.id.toLowerCase().includes(q) ||
-        job.customer.name.toLowerCase().includes(q) ||
-        job.customer.phone.includes(q) ||
-        job.collectionPin.includes(q) ||
-        job.files.some(f => f.name.toLowerCase().includes(q));
-      if (!match) return false;
-    }
-
-    // Queue tab matching
-    if (queueFilter === 'ACTIVE') return job.status === 'received_local' || job.status === 'spooling';
-    if (queueFilter === 'PRINTING') return job.status === 'printing';
-    if (queueFilter === 'READY') return job.status === 'ready_for_pickup';
-    if (queueFilter === 'COMPLETED') return job.status === 'completed' || job.status === 'cancelled';
-    return true;
-  });
-
-  const getStatusBadge = (status: JobStatus) => {
-    switch (status) {
-      case 'received_local':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200">RECEIVED</span>;
-      case 'spooling':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 animate-pulse">SPOOLING</span>;
-      case 'printing':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 animate-bounce">PRINTING</span>;
-      case 'ready_for_pickup':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">READY PICKUP</span>;
-      case 'completed':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">COMPLETED</span>;
-      case 'cancelled':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-200">CANCELLED</span>;
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="py-6 px-4 max-w-7xl mx-auto space-y-6">
@@ -381,312 +340,14 @@ export const MerchantView: React.FC = () => {
         <div className="space-y-4">
           {/* Print Volume & Resource Summary Widget */}
           <PrintVolumeWidget onNavigateTab={(tab) => setActiveTab(tab as MerchantSubTab)} />
-          
-          {/* Filter & Search Bar + Auto-Process Toggle */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-            
-            {/* Filter pills */}
-            <div className="flex items-center gap-1 overflow-x-auto text-xs">
-              {(['ALL', 'ACTIVE', 'PRINTING', 'READY', 'COMPLETED'] as const).map(f => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setQueueFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all shrink-0 ${
-                    queueFilter === f
-                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
 
-            {/* Right side: Auto-Process Quick Switch + Search Input */}
-            <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
-              {/* Inline Queue Auto-Process Switch */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <Zap className={`w-3.5 h-3.5 ${isAutoProcessOn ? 'text-emerald-500 fill-emerald-500 animate-pulse' : 'text-slate-400'}`} />
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                    Auto-Process
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  id="toolbar-queue-auto-process-toggle"
-                  onClick={toggleQueueAutoProcess}
-                  role="switch"
-                  aria-checked={isAutoProcessOn}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                    isAutoProcessOn ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-600'
-                  }`}
-                  title={isAutoProcessOn ? "Queue Auto-Process ON: automatically spools incoming customer documents upon upload & validation" : "Queue Auto-Process OFF: holds customer documents in queue for operator manual approval"}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                      isAutoProcessOn ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-                
-                <span className={`text-[10px] font-extrabold uppercase ${isAutoProcessOn ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {isAutoProcessOn ? 'ON' : 'OFF'}
-                </span>
-              </div>
-
-              {/* Search input */}
-              <div className="relative w-full sm:w-56">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search job, name, PIN..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-9 pl-9 pr-3 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Job List */}
-          {filteredJobs.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 rounded-xl p-12 text-center border border-slate-200 dark:border-slate-700">
-              <Printer className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No print jobs found</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                New customer jobs submitted via the QR portal will stream here instantly via local IPC.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredJobs.map((job) => {
-                const assignedPrinter = printers.find(p => p.id === job.assignedPrinterId);
-
-                return (
-                  <div
-                    key={job.id}
-                    id={`job-card-${job.id}`}
-                    className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-xs space-y-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all"
-                  >
-                    {/* Top Row: Job ID, Pin, Customer, Status */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-base font-mono font-black text-slate-900 dark:text-white">
-                              {job.id}
-                            </span>
-                            {getStatusBadge(job.status)}
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
-                            <span>PIN: <strong className="text-indigo-600 dark:text-indigo-400 font-mono">{job.collectionPin}</strong></span>
-                            <span>•</span>
-                            <span>{new Date(job.createdAt).toLocaleTimeString()}</span>
-                            <span>•</span>
-                            <span>{job.stationId}</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Customer Info */}
-                      <div className="flex items-center gap-3 self-start sm:self-auto text-xs">
-                        <div className="text-right">
-                          <p className="font-bold text-slate-800 dark:text-slate-200">{job.customer.name}</p>
-                          <p className="text-slate-500 dark:text-slate-400">{job.customer.phone}</p>
-                        </div>
-
-                        <button
-                          type="button"
-                          id={`contact-customer-${job.id}`}
-                          onClick={() => setContactJob(job)}
-                          className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 font-semibold rounded-lg flex items-center gap-1.5 transition-colors"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>Contact</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Middle Row: Specs, Files, and Pricing */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                      
-                      {/* Documents */}
-                      <div className="space-y-1.5 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Documents Attached</p>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewJob(job)}
-                            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Preview</span>
-                          </button>
-                        </div>
-                        {job.files.map(f => (
-                          <div 
-                            key={f.id} 
-                            onClick={() => setPreviewJob(job)}
-                            className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-mono text-[11px] hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer group"
-                            title="Click to open PDF.js Print Preview"
-                          >
-                            <span className="truncate max-w-[180px] flex items-center gap-1">
-                              <FileText className="w-3 h-3 text-slate-400 group-hover:text-indigo-500" />
-                              <span>{f.name}</span>
-                            </span>
-                            <span className="font-bold shrink-0">{f.pageCount} pgs</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Print Settings */}
-                      <div className="space-y-1 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Target Settings</p>
-                        <p className="font-semibold text-slate-800 dark:text-slate-200">
-                          {job.preferences.colorMode === 'bw' ? 'Black & White' : 'Full Color CMYK'} • {job.preferences.paperSize}
-                        </p>
-                        <p className="text-slate-600 dark:text-slate-400">
-                          {job.preferences.copies} {job.preferences.copies > 1 ? 'copies' : 'copy'} • {job.preferences.sidedness.startsWith('double') ? 'Duplex' : 'Single'} • {job.preferences.binding.replace(/_/g, ' ')}
-                        </p>
-                        {job.merchantNotes && (
-                          <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium truncate">
-                            {job.merchantNotes}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Printer Route & Payment */}
-                      <div className="space-y-1.5 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/40">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Routing & Payment</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Printer:</span>
-                          <select
-                            value={job.assignedPrinterId}
-                            onChange={(e) => assignPrinterToJob(job.id, e.target.value)}
-                            className="text-[11px] font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5"
-                          >
-                            {printers.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-slate-500">Paid:</span>
-                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                            ${job.pricing.total.toFixed(2)} ({job.payment.method.replace(/_/g, ' ')})
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Printing Progress Bar if active */}
-                    {job.status === 'printing' && (
-                      <div className="space-y-1 pt-1">
-                        <div className="flex justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                          <span>Printing Spool: {job.pagesPrinted} / {job.totalPagesToPrint} pages</span>
-                          <span>{job.progressPercent}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                          <div className="bg-indigo-600 h-full rounded-full transition-all duration-300" style={{ width: `${job.progressPercent}%` }}></div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Bottom Action Bar */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
-                      
-                      {/* Left: Shred status */}
-                      <div className="flex items-center gap-2 text-xs">
-                        {job.shredStatus.isShredded ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>Files Shredded (DoD 3-Pass)</span>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setShredJob(job)}
-                            className="inline-flex items-center gap-1 text-[11px] text-rose-600 hover:text-rose-700 font-semibold hover:underline"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Force Secure Shred File</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Right: Operator Actions */}
-                      <div className="flex items-center gap-2">
-                        {/* PDF.js Print Preview */}
-                        <button
-                          type="button"
-                          id={`preview-btn-${job.id}`}
-                          onClick={() => setPreviewJob(job)}
-                          className="px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                          title="Open PDF.js Secure Client-Side Print Preview"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                          <span>Print Preview</span>
-                        </button>
-
-                        {/* Override Preferences */}
-                        <button
-                          type="button"
-                          id={`override-btn-${job.id}`}
-                          onClick={() => setOverrideJob(job)}
-                          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1"
-                        >
-                          <Settings2 className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Modify Settings</span>
-                        </button>
-
-                        {/* If received or cancelled, option to Spool & Print */}
-                        {(job.status === 'received_local' || job.status === 'cancelled') && (
-                          <button
-                            type="button"
-                            id={`spool-btn-${job.id}`}
-                            onClick={() => spoolAndPrintJob(job.id)}
-                            className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>Send to Printer</span>
-                          </button>
-                        )}
-
-                        {/* If Ready for Pickup, mark Complete */}
-                        {job.status === 'ready_for_pickup' && (
-                          <button
-                            type="button"
-                            id={`complete-btn-${job.id}`}
-                            onClick={() => updateJobStatus(job.id, 'completed')}
-                            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Mark Handed Over</span>
-                          </button>
-                        )}
-
-                        {/* Cancel button */}
-                        {job.status !== 'completed' && job.status !== 'cancelled' && (
-                          <button
-                            type="button"
-                            id={`cancel-btn-${job.id}`}
-                            onClick={() => cancelJob(job.id, 'Cancelled by operator')}
-                            className="px-2.5 py-1.5 text-slate-400 hover:text-red-600 rounded-lg text-xs"
-                            title="Cancel Job"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Interactive Spool Queue Manager */}
+          <QueueManagementPanel
+            onOpenPreview={(job) => setPreviewJob(job)}
+            onOpenOverride={(job) => setOverrideJob(job)}
+            onOpenContact={(job) => setContactJob(job)}
+            onOpenShred={(job) => setShredJob(job)}
+          />
         </div>
       )}
 
